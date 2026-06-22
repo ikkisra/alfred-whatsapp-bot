@@ -15,4 +15,4 @@ COPY . .
 RUN mkdir -p alfred_session chat_history
 
 # Jalankan bot
-CMD ["node", "alfred.js"]
+CMD ["node", "index.js"]
