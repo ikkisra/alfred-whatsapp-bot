@@ -1,12 +1,15 @@
 const { default: makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const qrcode = require("qrcode-terminal");
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
 
-// GANTI DENGAN API KEY GEMINI KAMU
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Setup OpenRouter API
+const openai = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1"
+});
 
 // Folder untuk simpan riwayat percakapan
 const chatHistoryDir = "./chat_history";
@@ -15,7 +18,6 @@ if (!fs.existsSync(chatHistoryDir)) {
 }
 
 // Track pesan masuk yang belum dibalas Alpeta
-// Format: Map<userId, {timestamp: number, timerId: NodeJS.Timeout}>
 const pendingMessages = new Map();
 
 // Track user yang sudah di-intro oleh bot
@@ -36,14 +38,19 @@ function saveChatHistory(userId, history) {
     fs.writeFileSync(filePath, JSON.stringify(history, null, 2));
 }
 
-// Fungsi untuk panggil Gemini dengan retry otomatis
-async function callGeminiWithRetry(model, prompt, maxRetries = 3) {
+// Fungsi untuk panggil OpenRouter dengan retry otomatis
+async function callOpenRouterWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
-            const result = await model.generateContent(prompt);
-            return result.response.text();
+            const completion = await openai.chat.completions.create({
+                model: "meta-llama/llama-3.3-70b-instruct:free",
+                messages: messages,
+                temperature: 0.7,
+                max_tokens: 1024
+            });
+            return completion.choices[0]?.message?.content || "Maaf, saya tidak bisa merespons saat ini.";
         } catch (err) {
-            if ((err.message.includes("503") || err.message.includes("504") || err.message.includes("timeout")) && i < maxRetries - 1) {
+            if ((err.message.includes("503") || err.message.includes("429") || err.message.includes("timeout")) && i < maxRetries - 1) {
                 const waitTime = 5 * (i + 1);
                 console.log(`⚠️ Server sibuk, mencoba lagi dalam ${waitTime} detik... (Percobaan ${i + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
@@ -63,10 +70,10 @@ async function summarizeChat(userId, userName) {
         .map(msg => `${msg.role === 'user' ? userName : 'Alfred'}: ${msg.content}`)
         .join("\n");
 
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-    const prompt = `Rangkum percakapan berikut dalam bahasa Indonesia yang singkat dan jelas (maksimal 3-4 kalimat):\n\n${conversationText}`;
-    
-    return await callGeminiWithRetry(model, prompt);
+    const messages = [
+        { role: "user", content: `Rangkum percakapan berikut dalam bahasa Indonesia yang singkat dan jelas (maksimal 3-4 kalimat):\n\n${conversationText}` }
+    ];
+    return await callOpenRouterWithRetry(messages);
 }
 
 async function startAlfred() {
@@ -113,12 +120,10 @@ async function startAlfred() {
         if (!body) return;
 
         // Command khusus untuk Alpeta (ganti nomor ini dengan nomor kamu)
-        const alpetaNumber = "6289637888463@s.whatsapp.net"; // GANTI DENGAN NOMOR KAMU
+        const alpetaNumber = "6289637888463@s.whatsapp.net";
 
         // ===== DETEKSI JIKA ALPETA MEMBALAS =====
         if (isFromMe && from !== alpetaNumber) {
-            // Alpeta sudah membalas pesan dari user ini
-            // Hapus dari pendingMessages (batalkan timer bot)
             if (pendingMessages.has(from)) {
                 const pending = pendingMessages.get(from);
                 clearTimeout(pending.timerId);
@@ -129,7 +134,7 @@ async function startAlfred() {
         }
 
         // ===== JIKA PESAN DARI USER LAIN =====
-        if (isFromMe) return; // Abaikan pesan dari diri sendiri
+        if (isFromMe) return;
 
         console.log(`📩 Pesan dari ${pushName} (${from}): ${body}`);
 
@@ -167,20 +172,25 @@ async function startAlfred() {
                     let chatHistory = loadChatHistory(from);
                     chatHistory.push({ role: "user", content: body });
 
-                    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-                    
-                    const systemPrompt = `Kamu adalah Alfred, asisten AI pribadi Alpeta Riza. 
+                    const messages = [
+                        { 
+                            role: "system", 
+                            content: `Kamu adalah Alfred, asisten AI pribadi Alpeta Riza. 
 Tugas kamu:
 1. Balas pesan dengan cerdas, sopan, dan ramah
 2. Bantu jawab pertanyaan atau ngobrol santai
 3. Jika ditanya tentang Alpeta, bilang Alpeta sedang sibuk dan kamu akan sampaikan pesannya
 4. Jawab dalam bahasa Indonesia yang natural
-5. Jangan terlalu formal, tapi tetap sopan
+5. Jangan terlalu formal, tapi tetap sopan`
+                        },
+                        ...chatHistory.slice(-10).map(m => ({
+                            role: m.role,
+                            content: m.content
+                        })),
+                        { role: "user", content: body }
+                    ];
 
-Riwayat percakapan sebelumnya:
-${chatHistory.slice(-10).map(m => `${m.role === 'user' ? pushName : 'Alfred'}: ${m.content}`).join("\n")}`;
-
-                    const aiReply = await callGeminiWithRetry(model, systemPrompt);
+                    const aiReply = await callOpenRouterWithRetry(messages);
                     chatHistory.push({ role: "assistant", content: aiReply });
 
                     if (chatHistory.length > 20) {
@@ -199,9 +209,7 @@ ${chatHistory.slice(-10).map(m => `${m.role === 'user' ? pushName : 'Alfred'}: $
         }
 
         // ===== CHAT PERTAMA: SET TIMER 1 MENIT =====
-        // Simpan timestamp dan set timer
         const timerId = setTimeout(async () => {
-            // Timer habis = Alpeta tidak membalas dalam 1 menit
             console.log(`⏰ Alpeta tidak membalas ${pushName} dalam 1 menit, akan dibalas alfred`);
             
             try {
@@ -219,20 +227,25 @@ ${chatHistory.slice(-10).map(m => `${m.role === 'user' ? pushName : 'Alfred'}: $
                 let chatHistory = loadChatHistory(from);
                 chatHistory.push({ role: "user", content: body });
 
-                const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-                
-                const systemPrompt = `Kamu adalah Alfred, asisten AI pribadi Alpeta Riza. 
+                const messages = [
+                    { 
+                        role: "system", 
+                        content: `Kamu adalah Alfred, asisten AI pribadi Alpeta Riza. 
 Tugas kamu:
 1. Balas pesan dengan cerdas, sopan, dan ramah
 2. Bantu jawab pertanyaan atau ngobrol santai
 3. Jika ditanya tentang Alpeta, bilang Alpeta sedang sibuk dan kamu akan sampaikan pesannya
 4. Jawab dalam bahasa Indonesia yang natural
-5. Jangan terlalu formal, tapi tetap sopan
+5. Jangan terlalu formal, tapi tetap sopan`
+                    },
+                    ...chatHistory.slice(-10).map(m => ({
+                        role: m.role,
+                        content: m.content
+                    })),
+                    { role: "user", content: body }
+                ];
 
-Riwayat percakapan sebelumnya:
-${chatHistory.slice(-10).map(m => `${m.role === 'user' ? pushName : 'Alfred'}: ${m.content}`).join("\n")}`;
-
-                const aiReply = await callGeminiWithRetry(model, systemPrompt);
+                const aiReply = await callOpenRouterWithRetry(messages);
                 chatHistory.push({ role: "assistant", content: aiReply });
 
                 if (chatHistory.length > 20) {
