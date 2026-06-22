@@ -5,13 +5,11 @@ const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
 
-// Setup Groq API
-const groq = new OpenAI({
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://api.groq.com/openai/v1"
-   
+// Setup OpenRouter API
+const openai = new OpenAI({
+    apiKey: process.env.OPENROUTER_API_KEY,
+    baseURL: "https://openrouter.ai/api/v1"
 });
- console.log("🔑 Groq API Key terdeteksi:", process.env.GROQ_API_KEY ? "YA (Aman)" : "TIDAK (Error!)");
 
 const chatHistoryDir = "./chat_history";
 if (!fs.existsSync(chatHistoryDir)) {
@@ -21,7 +19,7 @@ if (!fs.existsSync(chatHistoryDir)) {
 const pendingMessages = new Map();
 const botActiveUsers = new Set();
 
-//  ENHANCED SYSTEM PROMPT UNTUK ALFRED
+// ENHANCED SYSTEM PROMPT UNTUK ALFRED
 const alfredSystemPrompt = `Kamu adalah Alfred, asisten AI pribadi Alpeta Riza yang cerdas, ramah, dan punya kepribadian menarik. Kamu sedang mengambil alih chat WhatsApp Alpeta karena beliau sedang sibuk.
 
 ## GAYA BICARA & KEPRIBADIAN:
@@ -54,24 +52,21 @@ function saveChatHistory(userId, history) {
     fs.writeFileSync(filePath, JSON.stringify(history, null, 2));
 }
 
-async function callGroqWithRetry(messages, maxRetries = 3) {
+async function callOpenRouterWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
-            const completion = await groq.chat.completions.create({
-                model: "llama3-70b-8192",
+            const completion = await openai.chat.completions.create({
+                model: "meta-llama/llama-3.3-70b-instruct:free", // Model gratis paling stabil di OpenRouter
                 messages: messages,
-                temperature: 0.8, // Sedikit dinaikkan agar lebih kreatif dan natural
+                temperature: 0.8,
                 top_p: 0.9,
                 max_tokens: 1024
             });
             return completion.choices[0]?.message?.content || "Maaf, saya tidak bisa merespons saat ini.";
-                } catch (err) {
-            // Tambahkan log ini untuk melihat detail error
-            console.error("❌ DETAIL ERROR GROQ:", err.status, err.message, err.error?.message || "");
-            
+        } catch (err) {
             if ((err.message.includes("429") || err.message.includes("503") || err.message.includes("timeout")) && i < maxRetries - 1) {
-                const waitTime = 5 * (i + 1);
-                console.log(`⚠️ Groq rate limit, retry ${waitTime} detik... (${i + 1}/${maxRetries})`);
+                const waitTime = 10 * (i + 1);
+                console.log(`️ Server sibuk, retry ${waitTime} detik... (${i + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
             } else {
                 throw err;
@@ -91,7 +86,7 @@ async function summarizeChat(userId, userName) {
     const messages = [
         { role: "user", content: `Rangkum percakapan berikut dalam bahasa Indonesia yang singkat, padat, dan jelas (maksimal 3-4 kalimat):\n\n${conversationText}` }
     ];
-    return await callGroqWithRetry(messages);
+    return await callOpenRouterWithRetry(messages);
 }
 
 async function startAlfred() {
@@ -158,7 +153,7 @@ async function startAlfred() {
             }
             try {
                 const summary = await summarizeChat(targetNumber + "@s.whatsapp.net", "Pengirim");
-                await sock.sendMessage(from, { text: `📋 *Rangkuman Percakapan dengan ${targetNumber}*\n\n${summary}` });
+                await sock.sendMessage(from, { text: ` *Rangkuman Percakapan dengan ${targetNumber}*\n\n${summary}` });
             } catch (err) {
                 await sock.sendMessage(from, { text: "❌ Gagal merangkum: " + err.message });
             }
@@ -173,7 +168,6 @@ async function startAlfred() {
             return;
         }
 
-        // Fungsi helper untuk generate balasan AI
         const generateAIReply = async (chatHistory) => {
             const messages = [
                 { role: "system", content: alfredSystemPrompt },
@@ -183,7 +177,7 @@ async function startAlfred() {
                 })),
                 { role: "user", content: body }
             ];
-            return await callGroqWithRetry(messages);
+            return await callOpenRouterWithRetry(messages);
         };
 
         if (botActiveUsers.has(from)) {
@@ -209,10 +203,10 @@ async function startAlfred() {
         }
 
         const timerId = setTimeout(async () => {
-            console.log(` Alpeta tidak membalas ${pushName} dalam 1 menit, Alfred mengambil alih.`);
+            console.log(`⏰ Alpeta tidak membalas ${pushName} dalam 1 menit, Alfred mengambil alih.`);
             
             try {
-                const intro = `Halo ${pushName}! 👋\n\nMaaf, Alpeta Riza sepertinya sedang fokus ada kesibukan lain saat ini. Saya Alfred, asisten pribadinya.\n\nTenang, saya siap bantu jawab atau catat pesan kamu. Ada yang bisa saya bantu? 🎩`;
+                const intro = `Halo ${pushName}! \n\nMaaf, Alpeta Riza sepertinya sedang fokus ada kesibukan lain saat ini. Saya Alfred, asisten pribadinya.\n\nTenang, saya siap bantu jawab atau catat pesan kamu. Ada yang bisa saya bantu? 🎩`;
                 await sock.sendMessage(from, { text: intro });
                 
                 botActiveUsers.add(from);
@@ -230,7 +224,7 @@ async function startAlfred() {
                 await sock.sendMessage(from, { text: aiReply });
                 console.log(`🎩 Alfred membalas ${pushName}: ${aiReply.substring(0, 50)}...`);
             } catch (err) {
-                console.error(" Alfred Error:", err.message);
+                console.error("❌ Alfred Error:", err.message);
                 await sock.sendMessage(from, { text: "Maaf, sistem saya sedang gangguan. Pesanmu akan saya sampaikan ke Alpeta." });
             }
 
