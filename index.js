@@ -9,7 +9,9 @@ const path = require("path");
 const groq = new OpenAI({
     apiKey: process.env.GROQ_API_KEY,
     baseURL: "https://api.groq.com/openai/v1"
+   
 });
+ console.log("🔑 Groq API Key terdeteksi:", process.env.GROQ_API_KEY ? "YA (Aman)" : "TIDAK (Error!)");
 
 const chatHistoryDir = "./chat_history";
 if (!fs.existsSync(chatHistoryDir)) {
@@ -56,7 +58,7 @@ async function callGroqWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
             const completion = await groq.chat.completions.create({
-                model: "llama-3.3-70b-versatile",
+                model: "llama3-70b-8192",
                 messages: messages,
                 temperature: 0.8, // Sedikit dinaikkan agar lebih kreatif dan natural
                 top_p: 0.9,
