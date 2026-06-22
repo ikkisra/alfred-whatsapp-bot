@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 
 // GANTI DENGAN API KEY GEMINI KAMU
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "AIzaSyB0d9GmUpmI1FOjBccxCi35D-KLm2V2Z88");
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Folder untuk simpan riwayat percakapan
 const chatHistoryDir = "./chat_history";
