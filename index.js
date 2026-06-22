@@ -8,7 +8,7 @@ const path = require("path");
 // Setup OpenRouter API
 const openai = new OpenAI({
     apiKey: process.env.OPENROUTER_API_KEY,
-    baseURL: "https://openrouter.ai/api/v1"
+    baseURL: "https://ai.rndbbb.my.id/v1"
 });
 
 const chatHistoryDir = "./chat_history";
@@ -56,7 +56,7 @@ async function callOpenRouterWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
             const completion = await openai.chat.completions.create({
-                model: "meta-llama/llama-3.3-70b-instruct:free", // Model gratis paling stabil di OpenRouter
+                model: "Gemini 3.5 Flash", // Model gratis paling stabil di OpenRouter
                 messages: messages,
                 temperature: 0.8,
                 top_p: 0.9,
