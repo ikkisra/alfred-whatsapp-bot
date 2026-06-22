@@ -56,7 +56,7 @@ async function callOpenRouterWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
             const completion = await openai.chat.completions.create({
-                model: "Gemini 3.5 Flash", // Model gratis paling stabil di OpenRouter
+                model: "google/gemini-3.5-flash", // Model gratis paling stabil di OpenRouter
                 messages: messages,
                 temperature: 0.8,
                 top_p: 0.9,
