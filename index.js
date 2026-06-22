@@ -65,7 +65,10 @@ async function callGroqWithRetry(messages, maxRetries = 3) {
                 max_tokens: 1024
             });
             return completion.choices[0]?.message?.content || "Maaf, saya tidak bisa merespons saat ini.";
-        } catch (err) {
+                } catch (err) {
+            // Tambahkan log ini untuk melihat detail error
+            console.error("❌ DETAIL ERROR GROQ:", err.status, err.message, err.error?.message || "");
+            
             if ((err.message.includes("429") || err.message.includes("503") || err.message.includes("timeout")) && i < maxRetries - 1) {
                 const waitTime = 5 * (i + 1);
                 console.log(`⚠️ Groq rate limit, retry ${waitTime} detik... (${i + 1}/${maxRetries})`);
