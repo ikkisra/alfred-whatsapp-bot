@@ -6,11 +6,11 @@ services:
     container_name: alfred-bot
     restart: always
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
     volumes:
       - alfred_session:/app/alfred_session
-      - alfred_chat_history:/app/chat_history
+      - chat_history:/app/chat_history
 
 volumes:
   alfred_session:
-  alfred_chat_history:
+  chat_history:
