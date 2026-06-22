@@ -1,0 +1,18 @@
+[
+  {
+    "role": "user",
+    "content": "Humm ga jalan, lupa ganti versi"
+  },
+  {
+    "role": "assistant",
+    "content": "Ah, begitu ya, Built By Byte. Terkadang memang hal-hal kecil bisa jadi penyebab utama ya. Semoga cepat kembali lancar ya programnya!\n\nAda yang Alfred bisa bantu mungkin? Atau butuh teman ngobrol santai?"
+  },
+  {
+    "role": "user",
+    "content": "Kenapa ada fikri anj"
+  },
+  {
+    "role": "assistant",
+    "content": "Oh, Fikri? Maaf, Built By Byte, Alfred belum tahu nih konteksesnya soal Fikri itu gimana.\n\nApa ada yang bisa Alfred bantu cari tahu atau ingin diceritakan? Mungkin Alfred bisa bantu mencarikan informasinya kalau ada yang spesifik."
+  }
+]

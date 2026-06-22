@@ -1,0 +1,18 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install --production
+
+# Copy semua file bot
+COPY . .
+
+# Buat folder untuk session dan chat history
+RUN mkdir -p alfred_session chat_history
+
+# Jalankan bot
+CMD ["node", "alfred.js"]
