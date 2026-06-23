@@ -8,7 +8,7 @@ const path = require("path");
 // Setup OpenRouter API
 const openai = new OpenAI({
     apiKey: process.env.NINEROUTER_KEY,
-    baseURL: "https://ai.rndbbb.my.id/v1"
+    baseURL: process.env.NINEROUTER_URL
 });
 
 const chatHistoryDir = "./chat_history";

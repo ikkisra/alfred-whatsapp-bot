@@ -6,6 +6,7 @@ services:
     container_name: alfred-bot
     restart: always
     environment:
+      - NINEROUTER_URL=${NINEROUTER_URL}
       - NINEROUTER_KEY=${NINEROUTER_KEY}
     volumes:
       - alfred_session:/app/alfred_session
