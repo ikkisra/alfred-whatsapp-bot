@@ -1,5 +1,3 @@
-require('dotenv').config(); // Untuk development lokal (tidak masalah kalau di Portainer)
-
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const qrcode = require("qrcode-terminal");
@@ -64,7 +62,7 @@ async function callOpenRouterWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
             const completion = await openai.chat.completions.create({
-                model: AI_MODEL, // Sekarang pakai env variable
+                model: AI_MODEL,
                 messages: messages,
                 temperature: 0.8,
                 top_p: 0.9,
@@ -177,7 +175,6 @@ async function startAlfred() {
             return;
         }
 
-        // FIXED: generateAIReply tidak lagi push body lagi
         const generateAIReply = async (chatHistory) => {
             const messages = [
                 { role: "system", content: alfredSystemPrompt },
