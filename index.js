@@ -56,7 +56,7 @@ async function callOpenRouterWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
             const completion = await openai.chat.completions.create({
-                model: "kr/deepseek-3.2", // Model gratis paling stabil di OpenRouter
+                model: "openai/gpt-5", // Model gratis paling stabil di OpenRouter
                 messages: messages,
                 temperature: 0.8,
                 top_p: 0.9,
