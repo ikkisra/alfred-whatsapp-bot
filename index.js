@@ -7,7 +7,7 @@ const path = require("path");
 
 // Setup OpenRouter API
 const openai = new OpenAI({
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: process.env.NINEROUTER_KEY,
     baseURL: "https://ai.rndbbb.my.id/v1"
 });
 
