@@ -6,6 +6,7 @@ services:
     container_name: alfred-bot
     restart: always
     environment:
+      - ALPETA_NUMBER=${ALPETA_NUMBER}
       - NINEROUTER_URL=${NINEROUTER_URL}
       - NINEROUTER_KEY=${NINEROUTER_KEY}
     volumes:

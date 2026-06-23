@@ -1,4 +1,6 @@
-const { default: makeWASocket, useMultiFileAuthState, delay, DisconnectReason } = require("@whiskeysockets/baileys");
+require('dotenv').config(); // Untuk development lokal (tidak masalah kalau di Portainer)
+
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require("@whiskeysockets/baileys");
 const pino = require("pino");
 const qrcode = require("qrcode-terminal");
 const OpenAI = require("openai");
@@ -10,6 +12,12 @@ const openai = new OpenAI({
     apiKey: process.env.NINEROUTER_KEY,
     baseURL: process.env.NINEROUTER_URL
 });
+
+// Model AI dari env (fallback ke gpt-4o)
+const AI_MODEL = process.env.AI_MODEL || "openai/gpt-4o";
+
+// Nomor Alpeta dari env
+const ALPETA_NUMBER = process.env.ALPETA_NUMBER || "6289637888463";
 
 const chatHistoryDir = "./chat_history";
 if (!fs.existsSync(chatHistoryDir)) {
@@ -56,7 +64,7 @@ async function callOpenRouterWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
             const completion = await openai.chat.completions.create({
-                model: "openai/gpt-5", // Model gratis paling stabil di OpenRouter
+                model: AI_MODEL, // Sekarang pakai env variable
                 messages: messages,
                 temperature: 0.8,
                 top_p: 0.9,
@@ -66,7 +74,7 @@ async function callOpenRouterWithRetry(messages, maxRetries = 3) {
         } catch (err) {
             if ((err.message.includes("429") || err.message.includes("503") || err.message.includes("timeout")) && i < maxRetries - 1) {
                 const waitTime = 10 * (i + 1);
-                console.log(`️ Server sibuk, retry ${waitTime} detik... (${i + 1}/${maxRetries})`);
+                console.log(`⚠️ Server sibuk, retry ${waitTime} detik... (${i + 1}/${maxRetries})`);
                 await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
             } else {
                 throw err;
@@ -91,6 +99,7 @@ async function summarizeChat(userId, userName) {
 
 async function startAlfred() {
     console.log("🎩 Memulai Alfred WhatsApp Assistant...");
+    console.log(`🤖 Menggunakan model: ${AI_MODEL}`);
     
     const { state, saveCreds } = await useMultiFileAuthState("alfred_session");
 
@@ -130,7 +139,7 @@ async function startAlfred() {
         const body = (msg.message.conversation || msg.message.extendedTextMessage?.text || "").trim();
         if (!body) return;
 
-        const alpetaNumber = "6289637888463@s.whatsapp.net";
+        const alpetaNumber = `${ALPETA_NUMBER}@s.whatsapp.net`;
 
         if (isFromMe && from !== alpetaNumber) {
             if (pendingMessages.has(from)) {
@@ -153,7 +162,7 @@ async function startAlfred() {
             }
             try {
                 const summary = await summarizeChat(targetNumber + "@s.whatsapp.net", "Pengirim");
-                await sock.sendMessage(from, { text: ` *Rangkuman Percakapan dengan ${targetNumber}*\n\n${summary}` });
+                await sock.sendMessage(from, { text: `📋 *Rangkuman Percakapan dengan ${targetNumber}*\n\n${summary}` });
             } catch (err) {
                 await sock.sendMessage(from, { text: "❌ Gagal merangkum: " + err.message });
             }
@@ -168,14 +177,14 @@ async function startAlfred() {
             return;
         }
 
+        // FIXED: generateAIReply tidak lagi push body lagi
         const generateAIReply = async (chatHistory) => {
             const messages = [
                 { role: "system", content: alfredSystemPrompt },
                 ...chatHistory.slice(-10).map(m => ({
                     role: m.role === 'user' ? 'user' : 'assistant',
                     content: m.content
-                })),
-                { role: "user", content: body }
+                }))
             ];
             return await callOpenRouterWithRetry(messages);
         };
@@ -206,7 +215,7 @@ async function startAlfred() {
             console.log(`⏰ Alpeta tidak membalas ${pushName} dalam 1 menit, Alfred mengambil alih.`);
             
             try {
-                const intro = `Halo ${pushName}! \n\nMaaf, Alpeta Riza sepertinya sedang fokus ada kesibukan lain saat ini. Saya Alfred, asisten pribadinya.\n\nTenang, saya siap bantu jawab atau catat pesan kamu. Ada yang bisa saya bantu? 🎩`;
+                const intro = `Halo ${pushName}!\n\nMaaf, Alpeta Riza sepertinya sedang fokus ada kesibukan lain saat ini. Saya Alfred, asisten pribadinya.\n\nTenang, saya siap bantu jawab atau catat pesan kamu. Ada yang bisa saya bantu? 🎩`;
                 await sock.sendMessage(from, { text: intro });
                 
                 botActiveUsers.add(from);
