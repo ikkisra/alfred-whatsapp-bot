@@ -14,10 +14,10 @@ const openai = new OpenAI({
 });
 
 // Model AI dari env (fallback ke gpt-4o)
-const AI_MODEL = process.env.AI_MODEL || "openai/gpt-4o";
+const AI_MODEL = process.env.AI_MODEL;
 
 // Nomor Alpeta dari env
-const ALPETA_NUMBER = process.env.ALPETA_NUMBER || "6289637888463";
+const ALPETA_NUMBER = process.env.ALPETA_NUMBER;
 
 const chatHistoryDir = "./chat_history";
 if (!fs.existsSync(chatHistoryDir)) {

@@ -7,6 +7,7 @@ services:
     restart: always
     environment:
       - ALPETA_NUMBER=${ALPETA_NUMBER}
+      - AI_MODEL=${AI_MODEL}
       - NINEROUTER_URL=${NINEROUTER_URL}
       - NINEROUTER_KEY=${NINEROUTER_KEY}
     volumes:
