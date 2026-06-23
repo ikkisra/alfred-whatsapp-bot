@@ -6,7 +6,7 @@ services:
     container_name: alfred-bot
     restart: always
     environment:
-      - OPENROUTER_API_KEY =${OPENROUTER_API_KEY}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
     volumes:
       - alfred_session:/app/alfred_session
       - chat_history:/app/chat_history
