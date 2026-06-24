@@ -184,7 +184,7 @@ async function startAlfred() {
 
         if (debounceTimers.has(from)) clearTimeout(debounceTimers.get(from));
 
-        // 5. TIMER 1 MENIT AWAL (Hanya untuk pesan pertama)
+        // 5. TIMER 5 MENIT AWAL (Hanya untuk pesan pertama)
         if (!pendingMessages.has(from) && !botActiveUsers.has(from)) {
             const waitTimerId = setTimeout(() => {
                 pendingMessages.delete(from);
@@ -194,14 +194,14 @@ async function startAlfred() {
                 if (batch.length > 0) {
                     processBatchReply(sock, from, pushName, batch.join("\n\n"), true);
                 }
-            }, 60000);
+            }, 300000);
             pendingMessages.set(from, { timerId: waitTimerId });
-            console.log(`⏱️ Timer 1 menit dimulai untuk ${pushName}.`);
+            console.log(`⏱️ Timer 5 menit dimulai untuk ${pushName}.`);
         }
 
         // 6. DEBOUNCE TIMER (Tunggu 8 detik untuk chat beruntun)
         const debounceId = setTimeout(() => {
-            // Jika timer 1 menit masih jalan, JANGAN balas dulu (tunggu 1 menit)
+            // Jika timer 5 menit masih jalan, JANGAN balas dulu (tunggu 5 menit)
             if (pendingMessages.has(from)) return; 
 
             const batch = messageBatches.get(from);
@@ -213,7 +213,7 @@ async function startAlfred() {
                 if (isFirstReply) botActiveUsers.add(from);
                 processBatchReply(sock, from, pushName, batch.join("\n\n"), isFirstReply);
             }
-        }, 8000); // 8 detik waktu tunggu untuk chat beruntun
+        }, 15000); // 15 detik waktu tunggu untuk chat beruntun
 
         debounceTimers.set(from, debounceId);
     });
