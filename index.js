@@ -21,33 +21,17 @@ if (!fs.existsSync(chatHistoryDir)) fs.mkdirSync(chatHistoryDir);
 const blacklistFile = path.join(__dirname, 'blacklist.json');
 let blacklist = fs.existsSync(blacklistFile) ? JSON.parse(fs.readFileSync(blacklistFile, 'utf-8')) : [];
 
-function saveBlacklist() {
-    fs.writeFileSync(blacklistFile, JSON.stringify(blacklist, null, 2));
-}
-
-function isBlacklisted(jid) {
-    const num = jid.split('@')[0];
-    return blacklist.includes(num);
-}
-
+function saveBlacklist() { fs.writeFileSync(blacklistFile, JSON.stringify(blacklist, null, 2)); }
+function isBlacklisted(jid) { return blacklist.includes(jid.split('@')[0]); }
 function addToBlacklist(jid) {
     const num = jid.split('@')[0];
-    if (!blacklist.includes(num)) {
-        blacklist.push(num);
-        saveBlacklist();
-        return true;
-    }
+    if (!blacklist.includes(num)) { blacklist.push(num); saveBlacklist(); return true; }
     return false;
 }
-
 function removeFromBlacklist(jid) {
     const num = jid.split('@')[0];
     const index = blacklist.indexOf(num);
-    if (index > -1) {
-        blacklist.splice(index, 1);
-        saveBlacklist();
-        return true;
-    }
+    if (index > -1) { blacklist.splice(index, 1); saveBlacklist(); return true; }
     return false;
 }
 // ------------------------
@@ -197,17 +181,100 @@ async function startAlfred() {
 
             const alpetaNumber = `${ALPETA_NUMBER}@s.whatsapp.net`;
 
-            // UPDATE NAME MAPPING
+            // 1. Update Name Mapping (Hanya untuk pesan masuk dari orang lain)
             if (!isFromMe && from !== alpetaNumber) updateNameMapping(pushName, from);
 
-            // --- BLACKLIST CHECK ---
+            // 2. Blacklist Check (Hanya untuk pesan masuk dari orang lain)
             if (!isFromMe && isBlacklisted(from)) {
                 console.log(`⛔ [BLACKLIST] Pesan dari ${pushName} (${from}) diabaikan total.`);
-                return; // Langsung stop, tidak ada timer, tidak ada batch, tidak ada balasan
+                return;
             }
-            // -----------------------
 
-            // 1. DETEKSI ALPETA MEMBALAS
+            // 3. COMMAND HANDLER (DIPINDAHKAN KE ATAS SEBELUM BLOKIR isFromMe)
+            if (from === alpetaNumber && isFromMe) {
+                if (body.startsWith("!rangkum")) {
+                    const args = body.split(" ").slice(1).join(" ");
+                    if (!args) return await sock.sendMessage(from, { text: "Format: !rangkum [nama/nomor]" });
+                    const isNumber = /^\d+$/.test(args);
+                    if (isNumber) {
+                        const summary = await summarizeChat(args + "@s.whatsapp.net", "Pengirim");
+                        return await sock.sendMessage(from, { text: `📋 *Rangkuman dengan ${args}*\n\n${summary}` });
+                    } else {
+                        const matches = findNumbersByName(args);
+                        if (matches.length === 0) return await sock.sendMessage(from, { text: `❌ Tidak ditemukan percakapan dengan nama "${args}".` });
+                        if (matches.length > 1) {
+                            let response = `⚠️ Ditemukan ${matches.length} orang dengan nama mirip "${args}":\n\n`;
+                            matches.forEach((match, idx) => response += `${idx + 1}. ${match.name} (${match.numbers.length} nomor)\n`);
+                            return await sock.sendMessage(from, { text: response });
+                        }
+                        const match = matches[0];
+                        let allSummaries = [];
+                        for (const number of match.numbers) {
+                            const summary = await summarizeChat(number, match.name);
+                            if (summary !== "Tidak ada percakapan untuk dirangkum.") allSummaries.push(`📱 ${number.replace('@s.whatsapp.net', '')}:\n${summary}`);
+                        }
+                        return await sock.sendMessage(from, { text: `📋 *Rangkuman dengan ${match.name}*\n\n${allSummaries.join("\n\n")}` });
+                    }
+                }
+
+                if (body.startsWith("!blacklist") || body.startsWith("!block")) {
+                    const parts = body.split(" ");
+                    const action = parts[1]?.toLowerCase();
+                    const target = parts.slice(2).join(" ");
+
+                    if (!action || !target) {
+                        return await sock.sendMessage(from, { text: "Format:\n• !blacklist add [nomor/nama]\n• !blacklist remove [nomor/nama]\n• !blacklist list" });
+                    }
+
+                    if (action === "add") {
+                        const isNumber = /^\d+$/.test(target);
+                        let targetJid = isNumber ? target + "@s.whatsapp.net" : null;
+                        if (!isNumber) {
+                            const matches = findNumbersByName(target);
+                            if (matches.length === 1 && matches[0].numbers.length === 1) targetJid = matches[0].numbers[0];
+                            else return await sock.sendMessage(from, { text: "❌ Nama tidak spesifik. Gunakan nomor langsung." });
+                        }
+                        if (addToBlacklist(targetJid)) return await sock.sendMessage(from, { text: `✅ ${targetJid.split('@')[0]} ditambahkan ke blacklist.` });
+                        else return await sock.sendMessage(from, { text: "⚠️ Nomor sudah ada di blacklist." });
+                    } 
+                    else if (action === "remove" || action === "unblock") {
+                        const isNumber = /^\d+$/.test(target);
+                        let targetJid = isNumber ? target + "@s.whatsapp.net" : null;
+                        if (!isNumber) {
+                            const matches = findNumbersByName(target);
+                            if (matches.length === 1 && matches[0].numbers.length === 1) targetJid = matches[0].numbers[0];
+                        }
+                        if (targetJid && removeFromBlacklist(targetJid)) return await sock.sendMessage(from, { text: `✅ ${targetJid.split('@')[0]} dihapus dari blacklist.` });
+                        else return await sock.sendMessage(from, { text: "❌ Nomor tidak ada di blacklist." });
+                    } 
+                    else if (action === "list") {
+                        if (blacklist.length === 0) return await sock.sendMessage(from, { text: "📭 Blacklist kosong." });
+                        let response = "⛔ *Daftar Blacklist:*\n\n";
+                        blacklist.forEach((num, idx) => response += `${idx + 1}. ${num}\n`);
+                        return await sock.sendMessage(from, { text: response });
+                    }
+                }
+
+                if (body.toLowerCase() === "!clear") {
+                    saveChatHistory(from, []);
+                    botActiveUsers.delete(from); pendingMessages.delete(from); cooldownUsers.delete(from); messageBatches.delete(from);
+                    if (debounceTimers.has(from)) clearTimeout(debounceTimers.get(from));
+                    return await sock.sendMessage(from, { text: "✅ Riwayat & cooldown dihapus." });
+                }
+                
+                if (body.toLowerCase() === "!list") {
+                    if (nameToNumberMap.size === 0) return await sock.sendMessage(from, { text: "📭 Belum ada kontak yang tersimpan." });
+                    let response = "📋 *Daftar Kontak yang Pernah Chat:*\n\n";
+                    let idx = 1;
+                    for (const [name, numbers] of nameToNumberMap.entries()) { response += `${idx}. ${name} (${numbers.size} nomor)\n`; idx++; }
+                    return await sock.sendMessage(from, { text: response });
+                }
+                
+                // Jika chat ke diri sendiri tapi bukan command, abaikan
+                return; 
+            }
+
+            // 4. DETEKSI ALPETA MEMBALAS (Handover & Cooldown)
             if (isFromMe && from !== alpetaNumber) {
                 if (pendingMessages.has(from)) { clearTimeout(pendingMessages.get(from).timerId); pendingMessages.delete(from); }
                 if (debounceTimers.has(from)) { clearTimeout(debounceTimers.get(from)); debounceTimers.delete(from); }
@@ -224,129 +291,37 @@ async function startAlfred() {
                 console.log(`✅ Alpeta mengambil alih ${from}. Alfred nonaktif 60 menit.`);
                 return;
             }
+
+            // 5. Block pesan dari diri sendiri yang lolos (safety net)
             if (isFromMe) return;
 
+            // 6. Cek Cooldown
             if (cooldownUsers.has(from)) {
-                console.log(`⏳ ${from} dalam cooldown 60 menit. Pesan diabaikan.`);
+                console.log(` ${from} dalam cooldown 60 menit. Pesan diabaikan.`);
                 return;
             }
 
-            // 3. HANDLE COMMANDS
-            if (from === alpetaNumber) {
-                if (body.startsWith("!rangkum")) {
-                    const args = body.split(" ").slice(1).join(" ");
-                    if (!args) return await sock.sendMessage(from, { text: "Format: !rangkum [nama/nomor]" });
-                    const isNumber = /^\d+$/.test(args);
-                    if (isNumber) {
-                        const summary = await summarizeChat(args + "@s.whatsapp.net", "Pengirim");
-                        return await sock.sendMessage(from, { text: `📋 *Rangkuman dengan ${args}*\n\n${summary}` });
-                    } else {
-                        const matches = findNumbersByName(args);
-                        if (matches.length === 0) return await sock.sendMessage(from, { text: ` Tidak ditemukan percakapan dengan nama "${args}".` });
-                        if (matches.length > 1) {
-                            let response = `⚠️ Ditemukan ${matches.length} orang dengan nama mirip "${args}":\n\n`;
-                            matches.forEach((match, idx) => response += `${idx + 1}. ${match.name} (${match.numbers.length} nomor)\n`);
-                            return await sock.sendMessage(from, { text: response });
-                        }
-                        const match = matches[0];
-                        let allSummaries = [];
-                        for (const number of match.numbers) {
-                            const summary = await summarizeChat(number, match.name);
-                            if (summary !== "Tidak ada percakapan untuk dirangkum.") allSummaries.push(`📱 ${number.replace('@s.whatsapp.net', '')}:\n${summary}`);
-                        }
-                        return await sock.sendMessage(from, { text: `📋 *Rangkuman dengan ${match.name}*\n\n${allSummaries.join("\n\n")}` });
-                    }
-                }
-
-                // --- BLACKLIST COMMANDS ---
-                if (body.startsWith("!blacklist") || body.startsWith("!block")) {
-                    const parts = body.split(" ");
-                    const action = parts[1]?.toLowerCase();
-                    const target = parts.slice(2).join(" ");
-
-                    if (!action || !target) {
-                        return await sock.sendMessage(from, { 
-                            text: "Format:\n• !blacklist add [nomor/nama]\n• !blacklist remove [nomor/nama]\n• !blacklist list" 
-                        });
-                    }
-
-                    if (action === "add") {
-                        const isNumber = /^\d+$/.test(target);
-                        let targetJid = isNumber ? target + "@s.whatsapp.net" : null;
-                        
-                        if (!isNumber) {
-                            const matches = findNumbersByName(target);
-                            if (matches.length === 1 && matches[0].numbers.length === 1) {
-                                targetJid = matches[0].numbers[0];
-                            } else {
-                                return await sock.sendMessage(from, { text: "❌ Nama tidak spesifik. Gunakan nomor langsung (contoh: !blacklist add 6281234567890)." });
-                            }
-                        }
-
-                        if (addToBlacklist(targetJid)) {
-                            return await sock.sendMessage(from, { text: `✅ ${targetJid.split('@')[0]} telah ditambahkan ke blacklist. Alfred tidak akan membalas mereka.` });
-                        } else {
-                            return await sock.sendMessage(from, { text: "⚠️ Nomor tersebut sudah ada di blacklist." });
-                        }
-                    } 
-                    else if (action === "remove" || action === "unblock") {
-                        const isNumber = /^\d+$/.test(target);
-                        let targetJid = isNumber ? target + "@s.whatsapp.net" : null;
-                        
-                        if (!isNumber) {
-                            const matches = findNumbersByName(target);
-                            if (matches.length === 1 && matches[0].numbers.length === 1) targetJid = matches[0].numbers[0];
-                        }
-
-                        if (targetJid && removeFromBlacklist(targetJid)) {
-                            return await sock.sendMessage(from, { text: `✅ ${targetJid.split('@')[0]} telah dihapus dari blacklist.` });
-                        } else {
-                            return await sock.sendMessage(from, { text: "❌ Nomor tidak ditemukan di blacklist." });
-                        }
-                    } 
-                    else if (action === "list") {
-                        if (blacklist.length === 0) return await sock.sendMessage(from, { text: "📭 Blacklist kosong." });
-                        let response = "⛔ *Daftar Blacklist:*\n\n";
-                        blacklist.forEach((num, idx) => response += `${idx + 1}. ${num}\n`);
-                        return await sock.sendMessage(from, { text: response });
-                    }
-                }
-                // --------------------------
-
-                if (body.toLowerCase() === "!clear") {
-                    saveChatHistory(from, []);
-                    botActiveUsers.delete(from); pendingMessages.delete(from); cooldownUsers.delete(from); messageBatches.delete(from);
-                    if (debounceTimers.has(from)) clearTimeout(debounceTimers.get(from));
-                    return await sock.sendMessage(from, { text: "✅ Riwayat & cooldown dihapus." });
-                }
-                
-                if (body.toLowerCase() === "!list") {
-                    if (nameToNumberMap.size === 0) return await sock.sendMessage(from, { text: "📭 Belum ada kontak yang tersimpan." });
-                    let response = "📋 *Daftar Kontak yang Pernah Chat:*\n\n";
-                    let idx = 1;
-                    for (const [name, numbers] of nameToNumberMap.entries()) { response += `${idx}. ${name} (${numbers.size} nomor)\n`; idx++; }
-                    return await sock.sendMessage(from, { text: response });
-                }
-            }
-
-            // 4. ANTI-SPAM / MESSAGE BATCHING
+            // 7. ANTI-SPAM / MESSAGE BATCHING
             if (!messageBatches.has(from)) messageBatches.set(from, []);
             messageBatches.get(from).push(body);
             if (debounceTimers.has(from)) clearTimeout(debounceTimers.get(from));
 
-            // 5. TIMER 5 MENIT AWAL
-            if (!pendingMessages.has(from) && !botActiveUsers.has(from)) {
-                const waitTimerId = setTimeout(() => {
-                    pendingMessages.delete(from);
-                    const batch = messageBatches.get(from) || [];
-                    messageBatches.delete(from);
-                    if (batch.length > 0) processBatchReply(sock, from, pushName, batch.join("\n\n"), true);
-                }, 5 * 60 * 1000);
-                pendingMessages.set(from, { timerId: waitTimerId });
-                console.log(`⏱️ Timer 5 menit dimulai untuk ${from} (pushName: ${pushName}).`);
-            }
+            // 8. TIMER 5 MENIT AWAL
+if (!pendingMessages.has(from) && !botActiveUsers.has(from)) {
+    const waitTimerId = setTimeout(() => {
+        pendingMessages.delete(from);
+        const batch = messageBatches.get(from) || [];
+        messageBatches.delete(from);
+        if (batch.length > 0) {
+            botActiveUsers.add(from); // <--- TAMBAHKAN BARIS INI
+            processBatchReply(sock, from, pushName, batch.join("\n\n"), true);
+        }
+    }, 5 * 60 * 1000);
+    pendingMessages.set(from, { timerId: waitTimerId });
+    console.log(`⏱️ Timer 5 menit dimulai untuk ${from} (pushName: ${pushName}).`);
+}
 
-            // 6. DEBOUNCE TIMER (15 detik)
+            // 9. DEBOUNCE TIMER (15 detik)
             const debounceId = setTimeout(() => {
                 if (pendingMessages.has(from)) return;
                 const batch = messageBatches.get(from);
