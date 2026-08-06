@@ -4,7 +4,7 @@ services:
   alfred-bot:
     build: .
     container_name: alfred-bot
-    restart: always
+    restart: no
     environment:
       - ALPETA_NUMBER=${ALPETA_NUMBER}
       - AI_MODEL=${AI_MODEL}
