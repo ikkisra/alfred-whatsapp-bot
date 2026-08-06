@@ -3,20 +3,16 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
   "keywords": [],
-  "author": "",
+  "author": "Alpeta Riza",
   "license": "ISC",
-  "description": "",
+  "description": "Alfred WhatsApp Assistant",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@whiskeysockets/baileys": "^7.0.0-rc13",
-    "dotenv": "^17.4.2",
-    "openai": "^6.44.0",
+    "openai": "^4.0.0",
     "pino": "^10.3.1",
-    "qrcode": "^1.5.4",
-    "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.34.7"
+    "qrcode-terminal": "^0.12.0"
   }
 }
