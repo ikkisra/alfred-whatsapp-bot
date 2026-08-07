@@ -6,10 +6,10 @@ services:
     container_name: alfred-bot
     restart: unless-stopped
     environment:
-      - NINEROUTER_URL=https://api.farouter.tech/v1
-      - NINEROUTER_KEY=sk-xxxxx
-      - AI_MODEL=mimo-v2.5-pro
-      - ALPETA_NUMBER=6289637888463
+      - NINEROUTER_URL=${NINEROUTER_URL}
+      - NINEROUTER_KEY=${NINEROUTER_KEY}
+      - AI_MODEL=${AI_MODEL}
+      - ALPETA_NUMBER=${ALPETA_NUMBER}
     volumes:
       # INI BAGIAN MOUNT VOLUME
       - alfred_session:/app/alfred_session
@@ -19,4 +19,3 @@ services:
 volumes:
   alfred_session:
   chat_history:
-  
