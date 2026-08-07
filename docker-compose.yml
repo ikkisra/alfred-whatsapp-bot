@@ -14,10 +14,9 @@ services:
       # INI BAGIAN MOUNT VOLUME
       - alfred_session:/app/alfred_session
       - chat_history:/app/chat_history
-      - blacklist.json:/app/blacklist.json
 
 # INI WAJIB ADA DI BAWAH (Untuk mendefinisikan named volumes)
 volumes:
   alfred_session:
   chat_history:
-  blacklist.json:
+  
