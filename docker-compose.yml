@@ -20,3 +20,4 @@ services:
 volumes:
   alfred_session:
   chat_history:
+  blacklist.json:
