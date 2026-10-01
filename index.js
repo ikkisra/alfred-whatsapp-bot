@@ -8,11 +8,33 @@ const path = require("path");
 // Setup OpenRouter API
 const openai = new OpenAI({
     apiKey: process.env.NINEROUTER_KEY,
-    baseURL: process.env.NINEROUTER_URL
+    baseURL: process.env.NINEROUTER_URL,
+    timeout: 120_000,
+    maxRetries: 0
 });
+
 
 const AI_MODEL = process.env.AI_MODEL;
 const ALPETA_NUMBER = process.env.ALPETA_NUMBER;
+
+const requiredEnv = [
+    "NINEROUTER_KEY",
+    "NINEROUTER_URL",
+    "AI_MODEL",
+    "ALPETA_NUMBER"
+];
+
+for (const key of requiredEnv) {
+    if (!process.env[key]) {
+        throw new Error(`Environment variable ${key} belum diset`);
+    }
+}
+
+console.log("✅ Konfigurasi AI terbaca:");
+console.log("URL:", process.env.NINEROUTER_URL);
+console.log("MODEL:", process.env.AI_MODEL);
+console.log("API KEY:", process.env.NINEROUTER_KEY ? "TERBACA" : "KOSONG");
+    
 
 const chatHistoryDir = "./chat_history";
 if (!fs.existsSync(chatHistoryDir)) fs.mkdirSync(chatHistoryDir);
@@ -87,17 +109,40 @@ async function callOpenRouterWithRetry(messages, maxRetries = 3) {
     for (let i = 0; i < maxRetries; i++) {
         try {
             const completion = await openai.chat.completions.create({
-                model: AI_MODEL, messages: messages, temperature: 0.8, top_p: 0.9, max_tokens: 1024
+                model: AI_MODEL,
+                messages,
+                temperature: 0.8,
+                top_p: 0.9,
+                max_tokens: 512
             });
-            return completion.choices[0]?.message?.content || "Maaf, saya tidak bisa merespons saat ini.";
+
+            return completion.choices[0]?.message?.content ||
+                "Maaf, saya tidak bisa merespons saat ini.";
+
         } catch (err) {
-            console.error(`❌ AI Error (attempt ${i + 1}/${maxRetries}):`, err.message);
-            if ((err.message.includes("429") || err.message.includes("503") || err.message.includes("timeout")) && i < maxRetries - 1) {
-                await new Promise(resolve => setTimeout(resolve, 10000 * (i + 1)));
-            } else throw err;
+            const status = err.status || err.code || err.response?.status;
+
+            console.error(
+                `❌ AI Error attempt ${i + 1}/${maxRetries}:`,
+                `status=${status}`,
+                err.message
+            );
+
+            const retryable =
+                [408, 429, 500, 502, 503, 504].includes(Number(status)) ||
+                /timeout|timed out|ETIMEDOUT|ECONNRESET|socket hang up/i.test(err.message);
+
+            if (!retryable || i >= maxRetries - 1) {
+                throw err;
+            }
+
+            const delay = 5000 * (i + 1);
+            console.log(`⏳ Retry dalam ${delay / 1000} detik...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
         }
     }
 }
+
 
 async function summarizeChat(userId, userName) {
     const history = loadChatHistory(userId);
