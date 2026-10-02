@@ -29,7 +29,7 @@ Bot ini memiliki fitur:
 Clone repository dan install dependency:
 
 ```bash
-git clone URL_REPOSITORY_KAMU.git
+git clone https://github.com/ikkisra/alfred-whatsapp-bot.git
 cd NAMA_FOLDER_REPOSITORY
 npm install
 ```
