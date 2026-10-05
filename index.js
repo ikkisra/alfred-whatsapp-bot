@@ -358,6 +358,17 @@ async function buildKnowledgeIndex() {
             }
         }
     }
+    
+function getKnowledgeFiles() {
+    if (!fs.existsSync(knowledgeDir)) {
+        return [];
+    }
+
+    return fs.readdirSync(knowledgeDir)
+        .filter(file => /\.(txt|md|markdown)$/i.test(file))
+        .map(file => path.join(knowledgeDir, file));
+}
+
     function appendWhatsAppKnowledge(content) {
     const cleanContent = content.trim();
 
