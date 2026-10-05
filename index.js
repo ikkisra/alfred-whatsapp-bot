@@ -322,6 +322,12 @@ async function buildKnowledgeIndex() {
     if (files.length === 0) {
         console.log("⚠️ Folder knowledge kosong. RAG belum memiliki dokumen.");
         knowledgeIndex = [];
+
+        fs.writeFileSync(
+            knowledgeIndexFile,
+            JSON.stringify([], null, 2)
+        );
+
         return;
     }
 
@@ -349,7 +355,9 @@ async function buildKnowledgeIndex() {
                     embedding
                 });
 
-                console.log(`   ✅ Embedding ${i + 1}/${chunks.length}`);
+                console.log(
+                    `   ✅ Embedding ${i + 1}/${chunks.length}`
+                );
             } catch (error) {
                 console.error(
                     `❌ Gagal membuat embedding ${fileName} chunk ${i}:`,
@@ -358,19 +366,25 @@ async function buildKnowledgeIndex() {
             }
         }
     }
-    
-function getKnowledgeFiles() {
-    if (!fs.existsSync(knowledgeDir)) {
-        return [];
-    }
 
-    return fs.readdirSync(knowledgeDir)
-        .filter(file => /\.(txt|md|markdown)$/i.test(file))
-        .map(file => path.join(knowledgeDir, file));
+    knowledgeIndex = newIndex;
+
+    fs.writeFileSync(
+        knowledgeIndexFile,
+        JSON.stringify(knowledgeIndex, null, 2)
+    );
+
+    console.log(
+        `✅ Knowledge index selesai: ${knowledgeIndex.length} chunk`
+    );
 }
 
-    function appendWhatsAppKnowledge(content) {
-    const cleanContent = content.trim();
+// =========================
+// WHATSAPP KNOWLEDGE COMMANDS
+// =========================
+
+function appendWhatsAppKnowledge(content) {
+    const cleanContent = String(content || "").trim();
 
     if (!cleanContent) {
         throw new Error("Isi knowledge kosong");
@@ -390,7 +404,11 @@ function getKnowledgeFiles() {
         ""
     ].join("\n");
 
-    fs.appendFileSync(whatsappKnowledgeFile, section, "utf8");
+    fs.appendFileSync(
+        whatsappKnowledgeFile,
+        section,
+        "utf8"
+    );
 }
 
 function readAllKnowledge() {
@@ -406,11 +424,11 @@ function readAllKnowledge() {
         const fileName = path.basename(filePath);
         const content = fs.readFileSync(filePath, "utf8").trim();
 
-        if (!content) continue;
-
-        sections.push(
-            `===== ${fileName} =====\n${content}`
-        );
+        if (content) {
+            sections.push(
+                `===== ${fileName} =====\n${content}`
+            );
+        }
     }
 
     return sections.length > 0
@@ -419,27 +437,20 @@ function readAllKnowledge() {
 }
 
 async function sendLongText(sock, jid, text, maxLength = 5000) {
-    const chunks = [];
+    if (!text || !text.trim()) {
+        await sock.sendMessage(jid, {
+            text: "Knowledge base masih kosong."
+        });
+        return;
+    }
 
     for (let i = 0; i < text.length; i += maxLength) {
-        chunks.push(text.slice(i, i + maxLength));
-    }
-
-    for (const chunk of chunks) {
-        await sock.sendMessage(jid, { text: chunk });
+        await sock.sendMessage(jid, {
+            text: text.slice(i, i + maxLength)
+        });
     }
 }
 
-
-    knowledgeIndex = newIndex;
-
-    fs.writeFileSync(
-        knowledgeIndexFile,
-        JSON.stringify(knowledgeIndex, null, 2)
-    );
-
-    console.log(`✅ Knowledge index selesai: ${knowledgeIndex.length} chunk`);
-}
 
 function loadKnowledgeIndexFromDisk() {
     if (!fs.existsSync(knowledgeIndexFile)) {
