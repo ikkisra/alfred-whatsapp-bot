@@ -24,6 +24,12 @@ const sessionDir = path.join(appDir, "alfred_session");
 const chatHistoryDir = path.join(appDir, "chat_history");
 
 const knowledgeDir = path.join(appDir, "knowledge");
+const whatsappKnowledgeFile = path.join(
+    knowledgeDir,
+    "whatsapp_notes.md"
+);
+
+
 const knowledgeIndexDir = path.join(appDir, "knowledge_data");
 const knowledgeIndexFile = path.join(
     knowledgeIndexDir,
@@ -352,6 +358,67 @@ async function buildKnowledgeIndex() {
             }
         }
     }
+    function appendWhatsAppKnowledge(content) {
+    const cleanContent = content.trim();
+
+    if (!cleanContent) {
+        throw new Error("Isi knowledge kosong");
+    }
+
+    const timestamp = new Date().toLocaleString("id-ID", {
+        timeZone: "Asia/Jakarta"
+    });
+
+    const section = [
+        "",
+        `## Catatan dari WhatsApp - ${timestamp}`,
+        "",
+        cleanContent,
+        "",
+        "---",
+        ""
+    ].join("\n");
+
+    fs.appendFileSync(whatsappKnowledgeFile, section, "utf8");
+}
+
+function readAllKnowledge() {
+    const files = getKnowledgeFiles();
+
+    if (files.length === 0) {
+        return "Knowledge base masih kosong.";
+    }
+
+    const sections = [];
+
+    for (const filePath of files) {
+        const fileName = path.basename(filePath);
+        const content = fs.readFileSync(filePath, "utf8").trim();
+
+        if (!content) continue;
+
+        sections.push(
+            `===== ${fileName} =====\n${content}`
+        );
+    }
+
+    return sections.length > 0
+        ? sections.join("\n\n")
+        : "Knowledge base masih kosong.";
+}
+
+async function sendLongText(sock, jid, text, maxLength = 5000) {
+    const chunks = [];
+
+    for (let i = 0; i < text.length; i += maxLength) {
+        chunks.push(text.slice(i, i + maxLength));
+    }
+
+    for (const chunk of chunks) {
+        await sock.sendMessage(jid, { text: chunk });
+    }
+}
+
 
     knowledgeIndex = newIndex;
 
@@ -690,6 +757,64 @@ async function startAlfred() {
             // Command handler hanya untuk pesan dari diri sendiri
             if (isFromMe) {
                 let isCommand = false;
+
+                if (body.toLowerCase().startsWith("!newindex")) {
+    const newKnowledge = body
+        .slice("!newindex".length)
+        .trim();
+
+    if (!newKnowledge) {
+        await sock.sendMessage(from, {
+            text: "Format:\n!newindex\nTulis isi knowledge di bawah command."
+        });
+    } else {
+        try {
+            await sock.sendMessage(from, {
+                text: "⏳ Knowledge sedang disimpan dan diindeks..."
+            });
+
+            appendWhatsAppKnowledge(newKnowledge);
+
+            await buildKnowledgeIndex();
+
+            await sock.sendMessage(from, {
+                text:
+                    `✅ Knowledge berhasil disimpan.\n` +
+                    `📄 File: whatsapp_notes.md\n` +
+                    `📚 Total index: ${knowledgeIndex.length} chunk`
+            });
+        } catch (error) {
+            console.error("❌ Gagal menyimpan knowledge:", error);
+
+            await sock.sendMessage(from, {
+                text: `❌ Gagal menyimpan knowledge:\n${error.message}`
+            });
+        }
+    }
+
+    isCommand = true;
+}
+
+else if (body.toLowerCase() === "!viewindex") {
+    try {
+        const allKnowledge = readAllKnowledge();
+
+        await sendLongText(
+            sock,
+            from,
+            `📚 ISI KNOWLEDGE BASE\n\n${allKnowledge}`
+        );
+    } catch (error) {
+        console.error("❌ Gagal membaca knowledge:", error.message);
+
+        await sock.sendMessage(from, {
+            text: `❌ Gagal membaca knowledge:\n${error.message}`
+        });
+    }
+
+    isCommand = true;
+}
+
 
                 if (body.startsWith("!rangkum")) {
                     const args = body.split(" ").slice(1).join(" ");

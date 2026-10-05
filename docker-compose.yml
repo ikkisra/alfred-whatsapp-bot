@@ -17,6 +17,7 @@ services:
       - alfred_session:/app/alfred_session
       - chat_history:/app/chat_history
       - knowledge_data:/app/knowledge_data
+      - knowledge:/app/knowledge
 
 volumes:
   alfred_session:
