@@ -5,16 +5,20 @@ services:
     build: .
     container_name: alfred-bot
     restart: unless-stopped
+
     environment:
       NINEROUTER_URL: ${NINEROUTER_URL}
       NINEROUTER_KEY: ${NINEROUTER_KEY}
       AI_MODEL: ${AI_MODEL}
+      NINEROUTER_EMBEDDING_MODEL: ${NINEROUTER_EMBEDDING_MODEL}
       ALPETA_NUMBER: ${ALPETA_NUMBER}
+
     volumes:
       - alfred_session:/app/alfred_session
       - chat_history:/app/chat_history
-      - knowledge_index:/app/knowledge_index.json
+      - knowledge_data:/app/knowledge_data
 
 volumes:
   alfred_session:
   chat_history:
+  knowledge_data:

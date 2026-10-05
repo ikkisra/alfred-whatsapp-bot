@@ -11,11 +11,15 @@ const qrcode = require("qrcode-terminal");
 const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
-const knowledgeIndexDir = path.join(appDir, "knowledge_data");
-const knowledgeIndexFile = path.join(
-    knowledgeIndexDir,
-    "knowledge_index.json"
-);
+
+
+if (!fs.existsSync(knowledgeDir)) {
+    fs.mkdirSync(knowledgeDir, { recursive: true });
+}
+
+if (!fs.existsSync(knowledgeIndexDir)) {
+    fs.mkdirSync(knowledgeIndexDir, { recursive: true });
+}
 
 
 // =========================
