@@ -11,6 +11,12 @@ const qrcode = require("qrcode-terminal");
 const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
+const knowledgeIndexDir = path.join(appDir, "knowledge_data");
+const knowledgeIndexFile = path.join(
+    knowledgeIndexDir,
+    "knowledge_index.json"
+);
+
 
 // =========================
 // CONFIGURATION
@@ -44,6 +50,21 @@ const openai = new OpenAI({
 
 const AI_MODEL = process.env.AI_MODEL;
 const ALPETA_NUMBER = process.env.ALPETA_NUMBER;
+
+const EMBEDDING_MODEL = process.env.NINEROUTER_EMBEDDING_MODEL;
+
+if (!EMBEDDING_MODEL ) {
+    throw new Error("Environment variable NINEROUTER_EMBEDDING_MODEL belum diset");
+}
+
+const knowledgeDir = path.join(appDir, "knowledge");
+const knowledgeIndexFile = path.join(knowledgeIndexDir, "knowledge_index.json");
+
+if (!fs.existsSync(knowledgeDir)) {
+    fs.mkdirSync(knowledgeDir, { recursive: true });
+}
+
+let knowledgeIndex = [];
 
 const appDir = __dirname;
 const sessionDir = path.join(appDir, "alfred_session");
@@ -170,6 +191,223 @@ function findNumbersByName(searchName) {
 }
 
 // =========================
+// RAG / KNOWLEDGE BASE
+// =========================
+
+function splitTextIntoChunks(text, maxCharacters = 1200) {
+    const normalizedText = text
+        .replace(/\r\n/g, "\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+    if (!normalizedText) return [];
+
+    const paragraphs = normalizedText
+        .split(/\n\s*\n/)
+        .map(paragraph => paragraph.trim())
+        .filter(Boolean);
+
+    const chunks = [];
+    let currentChunk = "";
+
+    for (const paragraph of paragraphs) {
+        const candidate = currentChunk
+            ? `${currentChunk}\n\n${paragraph}`
+            : paragraph;
+
+        if (candidate.length <= maxCharacters) {
+            currentChunk = candidate;
+        } else {
+            if (currentChunk) {
+                chunks.push(currentChunk);
+            }
+
+            // Jika satu paragraf terlalu panjang, potong berdasarkan karakter.
+            if (paragraph.length > maxCharacters) {
+                for (let i = 0; i < paragraph.length; i += maxCharacters) {
+                    chunks.push(paragraph.slice(i, i + maxCharacters));
+                }
+
+                currentChunk = "";
+            } else {
+                currentChunk = paragraph;
+            }
+        }
+    }
+
+    if (currentChunk) {
+        chunks.push(currentChunk);
+    }
+
+    return chunks;
+}
+
+async function createEmbedding(text) {
+    const result = await openai.embeddings.create({
+        model: EMBEDDING_MODEL,
+        input: text
+    });
+
+    const embedding = result.data?.[0]?.embedding;
+
+    if (!embedding) {
+        throw new Error("Embedding tidak ditemukan pada response provider");
+    }
+
+    return embedding;
+}
+
+function cosineSimilarity(vectorA, vectorB) {
+    if (!vectorA || !vectorB || vectorA.length !== vectorB.length) {
+        return 0;
+    }
+
+    let dotProduct = 0;
+    let magnitudeA = 0;
+    let magnitudeB = 0;
+
+    for (let i = 0; i < vectorA.length; i++) {
+        dotProduct += vectorA[i] * vectorB[i];
+        magnitudeA += vectorA[i] * vectorA[i];
+        magnitudeB += vectorB[i] * vectorB[i];
+    }
+
+    if (magnitudeA === 0 || magnitudeB === 0) {
+        return 0;
+    }
+
+    return dotProduct / (Math.sqrt(magnitudeA) * Math.sqrt(magnitudeB));
+}
+
+function getKnowledgeFiles() {
+    if (!fs.existsSync(knowledgeDir)) return [];
+
+    return fs.readdirSync(knowledgeDir)
+        .filter(file => /\.(txt|md|markdown)$/i.test(file))
+        .map(file => path.join(knowledgeDir, file));
+}
+
+async function buildKnowledgeIndex() {
+    const files = getKnowledgeFiles();
+
+    if (files.length === 0) {
+        console.log("⚠️ Folder knowledge kosong. RAG belum memiliki dokumen.");
+        knowledgeIndex = [];
+        return;
+    }
+
+    console.log(`📚 Membangun knowledge index dari ${files.length} file...`);
+
+    const newIndex = [];
+
+    for (const filePath of files) {
+        const fileName = path.basename(filePath);
+        const text = fs.readFileSync(filePath, "utf-8");
+        const chunks = splitTextIntoChunks(text);
+
+        console.log(`📄 ${fileName}: ${chunks.length} chunk`);
+
+        for (let i = 0; i < chunks.length; i++) {
+            const chunk = chunks[i];
+
+            try {
+                const embedding = await createEmbedding(chunk);
+
+                newIndex.push({
+                    id: `${fileName}-${i}`,
+                    source: fileName,
+                    text: chunk,
+                    embedding
+                });
+
+                console.log(`   ✅ Embedding ${i + 1}/${chunks.length}`);
+            } catch (error) {
+                console.error(
+                    `❌ Gagal membuat embedding ${fileName} chunk ${i}:`,
+                    error.message
+                );
+            }
+        }
+    }
+
+    knowledgeIndex = newIndex;
+
+    fs.writeFileSync(
+        knowledgeIndexFile,
+        JSON.stringify(knowledgeIndex, null, 2)
+    );
+
+    console.log(`✅ Knowledge index selesai: ${knowledgeIndex.length} chunk`);
+}
+
+function loadKnowledgeIndexFromDisk() {
+    if (!fs.existsSync(knowledgeIndexFile)) {
+        return false;
+    }
+
+    try {
+        const savedIndex = JSON.parse(
+            fs.readFileSync(knowledgeIndexFile, "utf-8")
+        );
+
+        if (!Array.isArray(savedIndex)) {
+            return false;
+        }
+
+        knowledgeIndex = savedIndex;
+        console.log(`📚 Knowledge index dimuat: ${knowledgeIndex.length} chunk`);
+        return true;
+    } catch (error) {
+        console.error("❌ Gagal membaca knowledge index:", error.message);
+        return false;
+    }
+}
+
+async function initializeKnowledgeBase() {
+    const loaded = loadKnowledgeIndexFromDisk();
+
+    if (!loaded) {
+        await buildKnowledgeIndex();
+    }
+}
+
+async function searchKnowledge(query, topK = 4) {
+    if (!knowledgeIndex.length) {
+        return [];
+    }
+
+    const queryEmbedding = await createEmbedding(query);
+
+    return knowledgeIndex
+        .map(item => ({
+            ...item,
+            score: cosineSimilarity(queryEmbedding, item.embedding)
+        }))
+        .filter(item => item.score >= 0.25)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, topK);
+}
+
+async function getRelevantKnowledge(query) {
+    try {
+        const results = await searchKnowledge(query, 4);
+
+        if (!results.length) {
+            return "";
+        }
+
+        return results
+            .map((item, index) => {
+                return `[Referensi ${index + 1} | ${item.source} | skor ${item.score.toFixed(3)}]\n${item.text}`;
+            })
+            .join("\n\n");
+    } catch (error) {
+        console.error("❌ Gagal mencari knowledge:", error.message);
+        return "";
+    }
+}
+
+// =========================
 // OPENROUTER / AI
 // =========================
 
@@ -232,20 +470,50 @@ async function summarizeChat(userId, userName) {
 // MESSAGE PROCESSING
 // =========================
 
-async function processBatchReply(sock, from, pushName, combinedText, isFirstReply) {
+async function processBatchReply(
+    sock,
+    from,
+    pushName,
+    combinedText,
+    isFirstReply,
+    imageData = null
+) 
+ {
     try {
         let chatHistory = loadChatHistory(from);
         chatHistory.push({ role: "user", content: combinedText });
 
-        const messages = [
-            { role: "system", content: alfredSystemPrompt },
-            ...chatHistory
-                .slice(-10)
-                .map(m => ({
-                    role: m.role === "user" ? "user" : "assistant",
-                    content: m.content
-                }))
-        ];
+    const relevantKnowledge = await getRelevantKnowledge(combinedText);
+
+const ragInstruction = relevantKnowledge
+    ? `
+
+## KNOWLEDGE BASE
+Gunakan referensi berikut jika relevan dengan pertanyaan user.
+Jangan mengarang fakta yang tidak ada di referensi.
+Jika informasi tidak tersedia, katakan bahwa informasi tersebut belum tersedia.
+
+${relevantKnowledge}
+`
+    : `
+
+## KNOWLEDGE BASE
+Tidak ada referensi yang relevan. Jangan mengarang informasi khusus tentang bisnis atau Alpeta.
+`;
+
+const messages = [
+    {
+        role: "system",
+        content: `${alfredSystemPrompt}${ragInstruction}`
+    },
+    ...chatHistory
+        .slice(-10)
+        .map(m => ({
+            role: m.role === "user" ? "user" : "assistant",
+            content: m.content
+        }))
+];
+
 
         let aiReply = await callOpenRouterWithRetry(messages);
 
@@ -290,6 +558,8 @@ async function startAlfred() {
     );
     console.log("📁 Session directory:", sessionDir);
     console.log("📁 Chat history directory:", chatHistoryDir);
+    await initializeKnowledgeBase();
+
 
     let version;
     let isLatest;
@@ -570,6 +840,20 @@ async function startAlfred() {
 
                     isCommand = true;
                 }
+                else if (body.toLowerCase() === "!reindex") {
+    await sock.sendMessage(from, {
+        text: "⏳ Knowledge base sedang dibangun ulang..."
+    });
+
+    await buildKnowledgeIndex();
+
+    await sock.sendMessage(from, {
+        text: `✅ Knowledge base selesai diindeks ulang. Total ${knowledgeIndex.length} chunk.`
+    });
+
+    isCommand = true;
+}
+
 
                 // Jika command, stop di sini.
                 if (isCommand) return;

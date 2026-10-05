@@ -13,6 +13,7 @@ services:
     volumes:
       - alfred_session:/app/alfred_session
       - chat_history:/app/chat_history
+      - knowledge_index:/app/knowledge_index.json
 
 volumes:
   alfred_session:
