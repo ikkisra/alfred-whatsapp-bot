@@ -4,26 +4,50 @@ const {
     DisconnectReason,
     makeCacheableSignalKeyStore,
     fetchLatestBaileysVersion,
-    Browsers
+    Browsers,
+    downloadMediaMessage
 } = require("@whiskeysockets/baileys");
+
 const pino = require("pino");
 const qrcode = require("qrcode-terminal");
 const OpenAI = require("openai");
 const fs = require("fs");
 const path = require("path");
 
+// =========================
+// PATH CONFIGURATION
+// =========================
 
-if (!fs.existsSync(knowledgeDir)) {
-    fs.mkdirSync(knowledgeDir, { recursive: true });
-}
+const appDir = __dirname;
 
-if (!fs.existsSync(knowledgeIndexDir)) {
-    fs.mkdirSync(knowledgeIndexDir, { recursive: true });
+const sessionDir = path.join(appDir, "alfred_session");
+const chatHistoryDir = path.join(appDir, "chat_history");
+
+const knowledgeDir = path.join(appDir, "knowledge");
+const knowledgeIndexDir = path.join(appDir, "knowledge_data");
+const knowledgeIndexFile = path.join(
+    knowledgeIndexDir,
+    "knowledge_index.json"
+);
+
+// =========================
+// CREATE REQUIRED DIRECTORIES
+// =========================
+
+for (const directory of [
+    sessionDir,
+    chatHistoryDir,
+    knowledgeDir,
+    knowledgeIndexDir
+]) {
+    if (!fs.existsSync(directory)) {
+        fs.mkdirSync(directory, { recursive: true });
+    }
 }
 
 
 // =========================
-// CONFIGURATION
+//  env CONFIGURATION
 // =========================
 
 const requiredEnv = [
@@ -61,8 +85,6 @@ if (!EMBEDDING_MODEL ) {
     throw new Error("Environment variable NINEROUTER_EMBEDDING_MODEL belum diset");
 }
 
-const knowledgeDir = path.join(appDir, "knowledge");
-const knowledgeIndexFile = path.join(knowledgeIndexDir, "knowledge_index.json");
 
 if (!fs.existsSync(knowledgeDir)) {
     fs.mkdirSync(knowledgeDir, { recursive: true });
@@ -70,9 +92,6 @@ if (!fs.existsSync(knowledgeDir)) {
 
 let knowledgeIndex = [];
 
-const appDir = __dirname;
-const sessionDir = path.join(appDir, "alfred_session");
-const chatHistoryDir = path.join(appDir, "chat_history");
 
 if (!fs.existsSync(sessionDir)) fs.mkdirSync(sessionDir, { recursive: true });
 if (!fs.existsSync(chatHistoryDir)) fs.mkdirSync(chatHistoryDir, { recursive: true });
